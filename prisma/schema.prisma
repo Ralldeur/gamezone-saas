@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  name           String
+  hashedPassword String
+  role           String    @default("EMPLOYEE") // ADMIN, EMPLOYEE
+  avatar         String?
+  active         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  roomId String?
+  room   GameRoom? @relation("RoomEmployees", fields: [roomId], references: [id])
+
+  ownedRooms    GameRoom[]    @relation("RoomOwner")
+  sessions      GameSession[] @relation("SessionOperator")
+  payments      Payment[]     @relation("PaymentCreator")
+  activityLogs  ActivityLog[]
+
+  @@index([email])
+  @@index([roomId])
+}
+
+model GameRoom {
+  id         String   @id @default(cuid())
+  name       String
+  address    String?
+  phone      String?
+  hourlyRate Float    @default(500) // FCFA par heure
+  currency   String   @default("FCFA")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  ownerId String
+  owner   User   @relation("RoomOwner", fields: [ownerId], references: [id])
+
+  stations      Station[]
+  employees     User[]         @relation("RoomEmployees")
+  notifications Notification[]
+
+  @@index([ownerId])
+}
+
+model Station {
+  id         String   @id @default(cuid())
+  name       String
+  type       String   // PS4, PS5, XBOX, PC
+  status     String   @default("FREE") // FREE, OCCUPIED, OUT_OF_SERVICE
+  hourlyRate Float?   // Override room rate if set
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  roomId String
+  room   GameRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  sessions GameSession[]
+
+  @@index([roomId])
+  @@index([status])
+}
+
+model GameSession {
+  id                  String    @id @default(cuid())
+  startTime           DateTime  @default(now())
+  endTime             DateTime?
+  pausedAt            DateTime?
+  totalPausedDuration Int       @default(0) // seconds
+  status              String    @default("ACTIVE") // ACTIVE, PAUSED, COMPLETED, CANCELLED
+  customerName        String?
+  plannedDuration     Int?      // planned duration in minutes
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  stationId String
+  station   Station @relation(fields: [stationId], references: [id], onDelete: Cascade)
+
+  startedById String
+  startedBy   User   @relation("SessionOperator", fields: [startedById], references: [id])
+
+  payment Payment?
+
+  @@index([stationId])
+  @@index([startedById])
+  @@index([status])
+  @@index([startTime])
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  amount    Float
+  method    String   // CASH, WAVE, ORANGE_MONEY, MTN_MONEY
+  createdAt DateTime @default(now())
+
+  sessionId String      @unique
+  session   GameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  createdById String
+  createdBy   User   @relation("PaymentCreator", fields: [createdById], references: [id])
+
+  @@index([method])
+  @@index([createdAt])
+  @@index([createdById])
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  action      String
+  description String
+  metadata    String?  // JSON string for extra data
+  createdAt   DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  type      String   // SESSION_END, MACHINE_INACTIVE, ALERT
+  title     String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  roomId String
+  room   GameRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId])
+  @@index([read])
+  @@index([createdAt])
+}
